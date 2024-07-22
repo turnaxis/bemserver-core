@@ -4,7 +4,10 @@ import smtplib
 from email.message import EmailMessage
 
 from bemserver_core.celery import celery, logger
+from dotenv import load_dotenv
+import os
 
+load_dotenv()
 
 class EmailSender:
     """Basic mail sender class
@@ -44,3 +47,21 @@ def send_email(dest_addrs, subject, content):
     """Send message in a task"""
     logger.info("Send email to %", dest_addrs)
     ems.send(dest_addrs, subject, content)
+
+@celery.task(name="send_email")
+def smtp_send_email(recipient, subject, content):
+    """Send the 2FA token to the user's email using smtplib."""
+    msg = EmailMessage()
+    msg["Subject"] = subject
+    msg["From"] = os.getenv("MAIL_SENDER")
+    msg["To"] = recipient
+    msg.set_content(content)
+
+    try:
+        with smtplib.SMTP(os.getenv("MAIL_SERVER"), os.getenv("MAIL_PORT")) as server:
+            server.starttls()  # Secure the connection
+            server.login(os.getenv("MAIL_USERNAME"), os.getenv("MAIL_PASSWORD"))
+            server.send_message(msg)
+        print("Email sent successfully")
+    except Exception as e:
+        print(f"Failed to send email: {e}")

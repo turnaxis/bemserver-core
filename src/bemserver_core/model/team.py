@@ -5,6 +5,7 @@ from bemserver_core.database import Base
 from users import UserGroup
 
 
+
 class Team(AuthMixin, Base):
     __tablename__ = "teams"
 

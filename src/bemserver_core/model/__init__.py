@@ -67,6 +67,7 @@ from .weather import (
     WeatherTimeseriesBySite,
 )
 from .authtoken import Token
+from .device import Device, DeviceByTimeseries, DeviceCategory
 
 __all__ = [
     "User",
@@ -123,7 +124,10 @@ __all__ = [
     "EnergyProductionTimeseriesByBuilding",
     "WeatherParameterEnum",
     "WeatherTimeseriesBySite",
-    "Token"
+    "Token",
+    "Device",
+    "DeviceByTimeseries",
+    "DeviceCategory",
 ]
 
 
@@ -179,7 +183,10 @@ AUTH_MODEL_CLASSES = [
     EnergyProductionTimeseriesBySite,
     EnergyProductionTimeseriesByBuilding,
     WeatherTimeseriesBySite,
-    Token
+    Token,
+    Device,
+    DeviceByTimeseries,
+    DeviceCategory,
 ]
 
 

@@ -1,7 +1,7 @@
 import sqlalchemy as sqla
 from bemserver_core.authorization import AuthMixin, Relation, auth
 from bemserver_core.database import Base
-from users import UserGroup
+from .users import UserGroup
 
 
 class Team(AuthMixin, Base):

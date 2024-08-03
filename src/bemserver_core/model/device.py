@@ -23,7 +23,7 @@ class Device(AuthMixin, Base):
 
     id = sqla.Column(sqla.Integer, primary_key=True)
     name = sqla.Column(sqla.String(100))
-    unique_identifier = sqla.Column(sqla.String(50))
+    unique_identifier = sqla.Column(sqla.String(50), unique=True)
     status = sqla.Column(sqla.Enum(DeviceStatus), nullable=False)
     energy_rating = sqla.Column(sqla.String(20), nullable=True)
     device_category_id = sqla.Column(
@@ -67,6 +67,7 @@ class Device(AuthMixin, Base):
 
 class DeviceByTimeseries(AuthMixin, Base):
     __tablename__ = "devices_by_timeseries"
+    __table_args__ = (sqla.UniqueConstraint("device_id", "timeseries_id"),)
 
     id = sqla.Column(sqla.Integer, primary_key=True)
     device_id = sqla.Column(sqla.ForeignKey("devices.id"), nullable=False)

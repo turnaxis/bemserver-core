@@ -862,40 +862,12 @@ class TimeseriesDataIO:
             "   AND ts_data.timestamp >= :start_dt "
             "   AND ts_data.timestamp < :end_dt "
             "GROUP BY sites.id "
-            # "ORDER BY bucket;"
         )
         data = db.session.execute(sqla.text(query), params)
 
         data_df = pd.DataFrame(data, columns=("id", "name", "value")).set_index("id")
-        # data_df.index = pd.DatetimeIndex(data_df.index, tz="UTC").tz_convert(tz_info)
-        # Pivot table to get timeseries in columns
-        data_df = data_df.pivot(values="value", columns=col_label).fillna(fill_value)
 
-        # Variable size intervals are aggregated to 1 x unit due to date_trunc
-        # Further aggregation is achieved here in pandas
-        if bucket_width_value != 1:
-            func = PANDAS_RE_AGGREG_FUNC_MAPPING[aggregation]
-            data_df = data_df.resample(pd_freq, closed="left", label="left").agg(func)
-
-        # Fill gaps: reindex with complete index
-        # data_df = data_df.reindex(complete_idx, fill_value=fill_value)
-
-        # Fill missing columns
-        # data_df = cls._fill_missing_and_reorder_columns(
-        #     data_df,
-        #     timeseries,
-        #     col_label,
-        #     fill_value=fill_value,
-        # )
-
-        data_df = data_df.astype(dtype)
-
-        # if convert_to:
-        #     # If aggregation is count, data is not in original TS unit but dimensionless
-        #     src_unit = "count" if aggregation == "count" else None
-        #     cls._convert_to(
-        #         data_df, timeseries, col_label, convert_to, src_unit=src_unit
-        #     )
+        data_df = data_df.fillna(0)
         return data_df
 
     @classmethod
@@ -1141,26 +1113,23 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
             data_df.index = pd.Series(data_df.index).apply(lambda x: x.isoformat())
 
         ret = {}
-        for col in data_df.columns:
-            val = data_df[col]
-            if dropna:
-                val = val.dropna()
-            else:
-                val = val.replace([np.nan], [None])
-            if not val.empty:
-                # ret[str(col)] = val.to_dict()
-                temp_dict = val.to_dict()
+        for index, row in data_df.iterrows():
+            site_name = row["name"]
+            consumption_value = row["value"]
 
-                # Apply custom key mapping
-                custom_dict = {}
-                for k, v in temp_dict.items():
-                    custom_dict["consumption"] = round((float(v) / 1000), 2)
-                    custom_dict['unit'] = 'kwH'
-                    custom_dict["cost"] = int(v) * 20 / 1000
-                    custom_dict["currency"] = 'Ksh'
-
-                ret[str(col)] = custom_dict
-
+            # Add or update the site name in the result dictionary
+            ret[site_name] = {
+                "consumption": (
+                    round((int(consumption_value) / 1000), 2)
+                    if consumption_value
+                    else 0.00
+                ),
+                "unit": "kwH",
+                "cost": (
+                    int(consumption_value) * 20 / 1000 if consumption_value else 0.00
+                ),
+                "currency": "Ksh",
+            }
         return json.dumps(ret)
 
     @classmethod

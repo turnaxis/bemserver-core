@@ -402,6 +402,83 @@ class TimeseriesDataIO:
         return data_df
 
     @classmethod
+    def get_timeseries_data_by_location(
+        cls,
+        start_dt,
+        end_dt,
+        timeseries,
+        data_state,
+        *,
+        convert_to=None,
+        timezone="UTC",
+        inclusive="left",
+        col_label="id",
+    ):
+        """Export timeseries data
+
+        :param datetime start_dt: Time interval lower bound (tz-aware)
+        :param datetime end_dt: Time interval exclusive upper bound (tz-aware)
+        :param list timeseries: List of timeseries
+        :param TimeseriesDataState data_state: Timeseries data state
+        :param dict convert_to: Mapping of timeseries ID/name -> unit to convert
+            timeseries data to
+        :param str timezone: IANA timezone
+        :param str inclusive: Whether to set each bound as closed or open.
+            Must be "both", "neither", "left" or "right". Default: "left".
+        :param string col_label: Timeseries attribute to use for column header.
+            Should be "id" or "name". Default: "id".
+
+        Returns a dataframe.
+        """
+        # Check permissions
+        for ts in timeseries:
+            auth.authorize(get_current_user(), "read_data", ts)
+
+        # Get timeseries data
+        stmt = (
+            sqla.select(
+                TimeseriesData.timestamp,
+                Timeseries.id,
+                Timeseries.name,
+                TimeseriesData.value,
+            )
+            .filter(
+                TimeseriesData.timeseries_by_data_state_id == TimeseriesByDataState.id
+            )
+            .filter(TimeseriesByDataState.data_state_id == data_state.id)
+            .filter(TimeseriesByDataState.timeseries_id == Timeseries.id)
+            .filter(Timeseries.id.in_(ts.id for ts in timeseries))
+        )
+        if start_dt:
+            if inclusive in {"both", "left"}:
+                stmt = stmt.filter(start_dt <= TimeseriesData.timestamp)
+            else:
+                stmt = stmt.filter(start_dt < TimeseriesData.timestamp)
+        if end_dt:
+            if inclusive in {"both", "right"}:
+                stmt = stmt.filter(TimeseriesData.timestamp <= end_dt)
+            else:
+                stmt = stmt.filter(TimeseriesData.timestamp < end_dt)
+        data = db.session.execute(stmt).all()
+
+        data_df = pd.DataFrame(
+            data, columns=("timestamp", "id", "name", "value")
+        ).set_index("timestamp")
+        data_df["value"] = data_df["value"].astype(float)
+        data_df.index = pd.DatetimeIndex(data_df.index, tz="UTC").tz_convert(
+            ZoneInfo(timezone)
+        )
+
+        data_df = data_df.pivot(columns=col_label, values="value")
+
+        data_df = cls._fill_missing_and_reorder_columns(data_df, timeseries, col_label)
+
+        if convert_to:
+            cls._convert_to(data_df, timeseries, col_label, convert_to)
+
+        return data_df
+
+    @classmethod
     def get_timeseries_buckets_data(
         cls,
         start_dt,
@@ -558,7 +635,7 @@ class TimeseriesDataIO:
         convert_to=None,
         timezone="UTC",
         col_label="id",
-        cost_per_kwh=20
+        cost_per_kwh=20,
     ):
         """Bucket timeseries data and export
 
@@ -674,9 +751,152 @@ class TimeseriesDataIO:
         # Calculate total energy consumption and cost of power
         # total_energy = data_df["value"].sum()
         # total_cost = total_energy * cost_per_kwh
-        
+
         return data_df
 
+    @classmethod
+    def get_timeseries_aggregate_by_location(
+        cls,
+        start_dt,
+        end_dt,
+        timeseries,
+        data_state,
+        bucket_width_value,
+        bucket_width_unit,
+        aggregation="sum",
+        *,
+        convert_to=None,
+        timezone="UTC",
+        col_label="id",
+    ):
+        """Bucket timeseries for location
+
+        :param datetime start_dt: Time interval lower bound (tz-aware)
+        :param datetime end_dt: Time interval exclusive upper bound (tz-aware)
+        :param list timeseries: List of timeseries
+        :param TimeseriesDataState data_state: Timeseries data state
+        :param int bucket_witdh_value: Value of the bucket width.
+            Must be at least 1.
+        :param str bucket_witdh_unit: Unit of the bucket width
+            One of "second", "minute", "hour", "day", "week", "month", "year".
+        :param dict convert_to: Mapping of timeseries ID/name -> unit to convert
+            timeseries data to
+        :param str aggregation: Aggregation function.
+            One of "avg", "sum", "min", "max" and "count".
+        :param str timezone: IANA timezone
+        :param string col_label: Timeseries attribute to use for column header.
+            Should be "id" or "name". Default: "id".
+
+        The time alignment of the buckets respects the timezone.
+
+        Note: ``start_dt`` and ``end_dt`` may have timezones that don't match
+        ``timezone`` parameter. The conversion is done internally. In practice,
+        though, it might not be the most intuitive way to use this function.
+
+        Returns a dataframe.
+        """
+        if bucket_width_value < 1:
+            raise TimeseriesDataIOInvalidBucketWidthError(
+                "bucket_width_value must be greater than or equal to 1"
+            )
+        if bucket_width_unit not in PERIODS:
+            raise TimeseriesDataIOInvalidBucketWidthError(
+                f"bucket_width_unit not in {PERIODS}"
+            )
+        if aggregation not in AGGREGATION_FUNCTIONS:
+            raise TimeseriesDataIOInvalidAggregationError("Invalid aggregation method")
+
+        # Check permissions
+        for ts in timeseries:
+            auth.authorize(get_current_user(), "read_data", ts)
+
+        fill_value = 0 if aggregation == "count" else np.nan
+        dtype = int if aggregation == "count" else float
+
+        # Ensure start/end dates are in target timezone
+        tz_info = ZoneInfo(timezone)
+        start_dt = start_dt.astimezone(tz_info)
+        end_dt = end_dt.astimezone(tz_info)
+
+        # Floor/ceil start/end dates to return complete buckets
+        start_dt = floor(start_dt, bucket_width_unit, bucket_width_value)
+        end_dt = ceil(end_dt, bucket_width_unit, bucket_width_value)
+
+        pd_freq = make_pandas_freq(bucket_width_unit, bucket_width_value)
+
+        # Create expected complete index
+        complete_idx = pd.date_range(
+            start_dt,
+            end_dt,
+            freq=pd_freq,
+            tz=tz_info,
+            name="timestamp",
+            inclusive="left",
+        )
+
+        if not timeseries:
+            return pd.DataFrame({}, index=complete_idx)
+
+        # At this stage, date_trunc can only aggregate by 1 x unit.
+        # For a N x width bucket size, the remaining aggregation is
+        # done in Pandas below.
+        params = {
+            "timezone": timezone,
+            "timeseries_ids": [ts.id for ts in timeseries],
+            "data_state_id": data_state.id,
+            "start_dt": start_dt,
+            "end_dt": end_dt,
+            "bucket_width_unit": bucket_width_unit,
+        }
+        query = (
+            "SELECT sites.id,sites.name, "
+            f" {aggregation}(ts_data.value) "
+            "FROM ts_data "
+            "JOIN ts_by_data_states ON ts_data.ts_by_data_state_id = ts_by_data_states.id "
+            "JOIN timeseries ON ts_by_data_states.timeseries_id = timeseries.id "
+            "JOIN ts_by_buildings ON timeseries.id = ts_by_buildings.timeseries_id "
+            "JOIN buildings ON ts_by_buildings.building_id = buildings.id "
+            "JOIN sites ON buildings.site_id = sites.id "
+            "WHERE ts_by_data_states.data_state_id = :data_state_id "
+            "   AND timeseries.id = ANY(:timeseries_ids) "
+            "   AND ts_data.timestamp >= :start_dt "
+            "   AND ts_data.timestamp < :end_dt "
+            "GROUP BY sites.id "
+            # "ORDER BY bucket;"
+        )
+        data = db.session.execute(sqla.text(query), params)
+
+        data_df = pd.DataFrame(data, columns=("id", "name", "value")).set_index("id")
+        # data_df.index = pd.DatetimeIndex(data_df.index, tz="UTC").tz_convert(tz_info)
+        # Pivot table to get timeseries in columns
+        data_df = data_df.pivot(values="value", columns=col_label).fillna(fill_value)
+
+        # Variable size intervals are aggregated to 1 x unit due to date_trunc
+        # Further aggregation is achieved here in pandas
+        if bucket_width_value != 1:
+            func = PANDAS_RE_AGGREG_FUNC_MAPPING[aggregation]
+            data_df = data_df.resample(pd_freq, closed="left", label="left").agg(func)
+
+        # Fill gaps: reindex with complete index
+        # data_df = data_df.reindex(complete_idx, fill_value=fill_value)
+
+        # Fill missing columns
+        # data_df = cls._fill_missing_and_reorder_columns(
+        #     data_df,
+        #     timeseries,
+        #     col_label,
+        #     fill_value=fill_value,
+        # )
+
+        data_df = data_df.astype(dtype)
+
+        # if convert_to:
+        #     # If aggregation is count, data is not in original TS unit but dimensionless
+        #     src_unit = "count" if aggregation == "count" else None
+        #     cls._convert_to(
+        #         data_df, timeseries, col_label, convert_to, src_unit=src_unit
+        #     )
+        return data_df
 
     @classmethod
     def delete(cls, start_dt, end_dt, timeseries, data_state):
@@ -845,7 +1065,6 @@ class TimeseriesDataCSVIO(TimeseriesDataIO, BaseCSVIO):
         # https://github.com/pandas-dev/pandas/issues/27328
         return data_df.to_csv(date_format="%Y-%m-%dT%H:%M:%S%z")
 
-    
 
 class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
     @classmethod
@@ -888,14 +1107,15 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
         )
 
     @staticmethod
-    def _df_to_json(data_df, dropna=False):
+    def _df_to_json(data_df, dropna=False, timestamp_index=True):
         """Serialize dataframe to json
 
         pandas to_json has a few shortcomings
         - can't drop NaN values
         - will convert datetimes to UTC
         """
-        data_df.index = pd.Series(data_df.index).apply(lambda x: x.isoformat())
+        if timestamp_index:
+            data_df.index = pd.Series(data_df.index).apply(lambda x: x.isoformat())
 
         ret = {}
         for col in data_df.columns:
@@ -906,6 +1126,40 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
                 val = val.replace([np.nan], [None])
             if not val.empty:
                 ret[str(col)] = val.to_dict()
+
+        return json.dumps(ret)
+
+    @staticmethod
+    def _custom_df_to_json(data_df, dropna=False, timestamp_index=True):
+        """Serialize dataframe to json
+
+        pandas to_json has a few shortcomings
+        - can't drop NaN values
+        - will convert datetimes to UTC
+        """
+        if timestamp_index:
+            data_df.index = pd.Series(data_df.index).apply(lambda x: x.isoformat())
+
+        ret = {}
+        for col in data_df.columns:
+            val = data_df[col]
+            if dropna:
+                val = val.dropna()
+            else:
+                val = val.replace([np.nan], [None])
+            if not val.empty:
+                # ret[str(col)] = val.to_dict()
+                temp_dict = val.to_dict()
+
+                # Apply custom key mapping
+                custom_dict = {}
+                for k, v in temp_dict.items():
+                    custom_dict["consumption"] = round((float(v) / 1000), 2)
+                    custom_dict['unit'] = 'kwH'
+                    custom_dict["cost"] = int(v) * 20 / 1000
+                    custom_dict["currency"] = 'Ksh'
+
+                ret[str(col)] = custom_dict
 
         return json.dumps(ret)
 
@@ -1001,6 +1255,40 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
             col_label=col_label,
         )
         return cls._df_to_json(data_df)
+
+    @classmethod
+    def export_json_aggregate_by_location(
+        cls,
+        start_dt,
+        end_dt,
+        timeseries,
+        data_state,
+        bucket_width_value,
+        bucket_width_unit,
+        aggregation="avg",
+        *,
+        convert_to=None,
+        timezone="UTC",
+        col_label="id",
+    ):
+        """Bucket timeseries data and export as JSON string
+
+        See ``TimeseriesDataIO.get_timeseries_buckets_data``.
+        """
+        data_df = cls.get_timeseries_aggregate_by_location(
+            start_dt,
+            end_dt,
+            timeseries,
+            data_state,
+            bucket_width_value,
+            bucket_width_unit,
+            aggregation,
+            convert_to=convert_to,
+            timezone=timezone,
+            col_label=col_label,
+        )
+        return cls._custom_df_to_json(data_df, timestamp_index=False)
+
 
 tsdio = TimeseriesDataIO()
 tsdcsvio = TimeseriesDataCSVIO()

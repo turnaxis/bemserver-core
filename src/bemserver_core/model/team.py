@@ -9,7 +9,7 @@ class Team(AuthMixin, Base):
 
     id = sqla.Column(sqla.Integer, primary_key=True)
     name = sqla.Column(sqla.String(80), unique=True, nullable=False)
-    user_group_id = sqla.Column(sqla.ForeignKey("u_groups.id"), nullable=False)
+    user_group_id = sqla.Column(sqla.ForeignKey("user_groups.id"), nullable=False)
 
     user_group = sqla.orm.relationship(
         UserGroup,

@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-from bemserver_core.model.team import Team
+from bemserver_core.model.team import Member, Team
 
 from .campaigns import (
     Campaign,
@@ -128,6 +128,7 @@ __all__ = [
     "WeatherTimeseriesBySite",
     "Token",
     "Team",
+    "Member",
 ]
 
 
@@ -185,6 +186,7 @@ AUTH_MODEL_CLASSES = [
     WeatherTimeseriesBySite,
     Token,
     Team,
+    Member,
 ]
 
 

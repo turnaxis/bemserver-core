@@ -2,6 +2,8 @@
 
 from pathlib import Path
 
+from bemserver_core.model.team import Member, Team
+
 from .campaigns import (
     Campaign,
     CampaignScope,
@@ -125,9 +127,8 @@ __all__ = [
     "WeatherParameterEnum",
     "WeatherTimeseriesBySite",
     "Token",
-    "Device",
-    "DeviceByTimeseries",
-    "DeviceCategory",
+    "Team",
+    "Member",
 ]
 
 
@@ -184,9 +185,8 @@ AUTH_MODEL_CLASSES = [
     EnergyProductionTimeseriesByBuilding,
     WeatherTimeseriesBySite,
     Token,
-    Device,
-    DeviceByTimeseries,
-    DeviceCategory,
+    Team,
+    Member,
 ]
 
 

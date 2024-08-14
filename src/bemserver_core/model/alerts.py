@@ -3,25 +3,24 @@ from bemserver_core.database import Base
 from bemserver_core.authorization import AuthMixin, Relation, auth
 from enum import Enum
 from datetime import datetime
-from sqlalchemy.orm import relationship
-from bemserver_core.model.device import Device
-from bemserver_core.model.users import User
+from sqlalchemy.dialects.postgresql import ENUM
 
-class PriorityLevel(Enum):
-    LOW = "low"
-    MODERATE = "moderate"
-    HIGH = "high"
+class AlertType(Enum):
+    GREEN = "green"
+    ORANGE = "orange"
+    RED = "red"
 
 class Alert(AuthMixin, Base):
     __tablename__ = "alerts"
 
     id = sqla.Column(sqla.Integer, primary_key=True)
     device_id = sqla.Column(sqla.ForeignKey("devices.id"), nullable=False)
+    user_id = sqla.Column(sqla.ForeignKey("users.id"), nullable=False)
     threshold = sqla.Column(sqla.Float, nullable=False)
     consumption = sqla.Column(sqla.Float, nullable=False)
     status = sqla.Column(sqla.String(50), nullable=False)  # green, orange, red
     description = sqla.Column(sqla.String(200), nullable=True)
-    priority = sqla.Column(sqla.Enum(PriorityLevel), nullable=False)
+    alert_type = sqla.Column(sqla.Enum(AlertType), nullable=False)
     action_required = sqla.Column(sqla.String(200), nullable=True)
     location = sqla.Column(sqla.String(100), nullable=False)
     created_at = sqla.Column(sqla.DateTime, default=datetime.utcnow)
@@ -30,8 +29,15 @@ class Alert(AuthMixin, Base):
     resolution_description = sqla.Column(sqla.String(200), nullable=True)
     action_taken = sqla.Column(sqla.String(200), nullable=True)
 
-    device = relationship("Device", back_populates="alerts")
-    resolved_by_user = relationship("User", back_populates="resolved_alerts")
+    device = sqla.orm.relationship(
+        "Device",
+        backref=sqla.orm.backref("alerts", cascade="all, delete-orphan"),
+    )
+
+    user = sqla.orm.relationship(
+        "User",
+        backref=sqla.orm.backref("alerts", cascade="all, delete-orphan"),
+    )
 
     @classmethod
     def register_class(cls):
@@ -52,7 +58,3 @@ class Alert(AuthMixin, Base):
                 ),
             },
         )
-
-
-Device.alerts = relationship("Alert", back_populates="device", cascade="all, delete-orphan")
-User.resolved_alerts = relationship("Alert", back_populates="resolved_by_user", cascade="all, delete-orphan")

@@ -850,12 +850,14 @@ class TimeseriesDataIO:
         }
         query = (
             "SELECT sites.id,sites.name, "
-            f" {aggregation}(ts_data.value) "
+            f" {aggregation}(ts_data.value), "
+            "COUNT(DISTINCT devices.id) AS device_count "
             "FROM ts_data "
             "JOIN ts_by_data_states ON ts_data.ts_by_data_state_id = ts_by_data_states.id "
             "JOIN timeseries ON ts_by_data_states.timeseries_id = timeseries.id "
-            "JOIN ts_by_buildings ON timeseries.id = ts_by_buildings.timeseries_id "
-            "JOIN buildings ON ts_by_buildings.building_id = buildings.id "
+            "JOIN devices_by_timeseries ON timeseries.id = devices_by_timeseries.timeseries_id "
+            "JOIN devices ON devices_by_timeseries.device_id = devices.id "
+            "JOIN buildings ON devices.building_id = buildings.id "
             "JOIN sites ON buildings.site_id = sites.id "
             "WHERE ts_by_data_states.data_state_id = :data_state_id "
             "   AND timeseries.id = ANY(:timeseries_ids) "
@@ -865,8 +867,125 @@ class TimeseriesDataIO:
         )
         data = db.session.execute(sqla.text(query), params)
 
-        data_df = pd.DataFrame(data, columns=("id", "name", "value")).set_index("id")
+        data_df = pd.DataFrame(data, columns=("id", "name", "value", "count")).set_index("id")
 
+        data_df = data_df.fillna(0)
+        return data_df
+
+    @classmethod
+    def get_timeseries_aggregate_by_device_category(
+        cls,
+        start_dt,
+        end_dt,
+        timeseries,
+        data_state,
+        bucket_width_value,
+        bucket_width_unit,
+        aggregation="sum",
+        *,
+        convert_to=None,
+        timezone="UTC",
+        col_label="id",
+    ):
+        """Bucket timeseries for location
+
+        :param datetime start_dt: Time interval lower bound (tz-aware)
+        :param datetime end_dt: Time interval exclusive upper bound (tz-aware)
+        :param list timeseries: List of timeseries
+        :param TimeseriesDataState data_state: Timeseries data state
+        :param int bucket_witdh_value: Value of the bucket width.
+            Must be at least 1.
+        :param str bucket_witdh_unit: Unit of the bucket width
+            One of "second", "minute", "hour", "day", "week", "month", "year".
+        :param dict convert_to: Mapping of timeseries ID/name -> unit to convert
+            timeseries data to
+        :param str aggregation: Aggregation function.
+            One of "avg", "sum", "min", "max" and "count".
+        :param str timezone: IANA timezone
+        :param string col_label: Timeseries attribute to use for column header.
+            Should be "id" or "name". Default: "id".
+
+        The time alignment of the buckets respects the timezone.
+
+        Note: ``start_dt`` and ``end_dt`` may have timezones that don't match
+        ``timezone`` parameter. The conversion is done internally. In practice,
+        though, it might not be the most intuitive way to use this function.
+
+        Returns a dataframe.
+        """
+        if bucket_width_value < 1:
+            raise TimeseriesDataIOInvalidBucketWidthError(
+                "bucket_width_value must be greater than or equal to 1"
+            )
+        if bucket_width_unit not in PERIODS:
+            raise TimeseriesDataIOInvalidBucketWidthError(
+                f"bucket_width_unit not in {PERIODS}"
+            )
+        if aggregation not in AGGREGATION_FUNCTIONS:
+            raise TimeseriesDataIOInvalidAggregationError("Invalid aggregation method")
+
+        # Check permissions
+        for ts in timeseries:
+            auth.authorize(get_current_user(), "read_data", ts)
+
+        fill_value = 0 if aggregation == "count" else np.nan
+        dtype = int if aggregation == "count" else float
+
+        # Ensure start/end dates are in target timezone
+        tz_info = ZoneInfo(timezone)
+        start_dt = start_dt.astimezone(tz_info)
+        end_dt = end_dt.astimezone(tz_info)
+
+        # Floor/ceil start/end dates to return complete buckets
+        start_dt = floor(start_dt, bucket_width_unit, bucket_width_value)
+        end_dt = ceil(end_dt, bucket_width_unit, bucket_width_value)
+
+        pd_freq = make_pandas_freq(bucket_width_unit, bucket_width_value)
+
+        # Create expected complete index
+        complete_idx = pd.date_range(
+            start_dt,
+            end_dt,
+            freq=pd_freq,
+            tz=tz_info,
+            name="timestamp",
+            inclusive="left",
+        )
+
+        if not timeseries:
+            return pd.DataFrame({}, index=complete_idx)
+
+        # At this stage, date_trunc can only aggregate by 1 x unit.
+        # For a N x width bucket size, the remaining aggregation is
+        # done in Pandas below.
+        params = {
+            "timezone": timezone,
+            "timeseries_ids": [ts.id for ts in timeseries],
+            "data_state_id": data_state.id,
+            "start_dt": start_dt,
+            "end_dt": end_dt,
+            "bucket_width_unit": bucket_width_unit,
+        }
+        query = (
+            "SELECT devicecategory.id, devicecategory.name, "
+            f" {aggregation}(ts_data.value), "
+            "COUNT(DISTINCT devices.id) AS device_count "
+            "FROM ts_data "
+            "JOIN ts_by_data_states ON ts_data.ts_by_data_state_id = ts_by_data_states.id "
+            "JOIN timeseries ON ts_by_data_states.timeseries_id = timeseries.id "
+            "JOIN devices_by_timeseries ON timeseries.id = devices_by_timeseries.timeseries_id "
+            "JOIN devices ON devices_by_timeseries.device_id = devices.id "
+            "JOIN devicecategory ON devices.device_category_id = devicecategory.id "
+            "WHERE ts_by_data_states.data_state_id = :data_state_id "
+            "   AND timeseries.id = ANY(:timeseries_ids) "
+            "   AND ts_data.timestamp >= :start_dt "
+            "   AND ts_data.timestamp < :end_dt "
+            "GROUP BY devicecategory.id "
+        )
+        data = db.session.execute(sqla.text(query), params)
+        print(data)
+        data_df = pd.DataFrame(data, columns=("id", "name", "value", "count")).set_index("id")
+        print(data_df)
         data_df = data_df.fillna(0)
         return data_df
 
@@ -1111,7 +1230,6 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
         """
         if timestamp_index:
             data_df.index = pd.Series(data_df.index).apply(lambda x: x.isoformat())
-
         ret = {}
         for index, row in data_df.iterrows():
             site_name = row["name"]
@@ -1130,6 +1248,9 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
                 ),
                 "currency": "Ksh",
             }
+
+            if row.get("count"):
+                ret[site_name]["devices_count"] = row["count"]
         return json.dumps(ret)
 
     @classmethod
@@ -1258,6 +1379,38 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
         )
         return cls._custom_df_to_json(data_df, timestamp_index=False)
 
+    @classmethod
+    def export_json_aggregate_by_device_category(
+        cls,
+        start_dt,
+        end_dt,
+        timeseries,
+        data_state,
+        bucket_width_value,
+        bucket_width_unit,
+        aggregation="avg",
+        *,
+        convert_to=None,
+        timezone="UTC",
+        col_label="id",
+    ):
+        """Bucket timeseries data and export as JSON string
+
+        See ``TimeseriesDataIO.get_timeseries_buckets_data``.
+        """
+        data_df = cls.get_timeseries_aggregate_by_device_category(
+            start_dt,
+            end_dt,
+            timeseries,
+            data_state,
+            bucket_width_value,
+            bucket_width_unit,
+            aggregation,
+            convert_to=convert_to,
+            timezone=timezone,
+            col_label=col_label,
+        )
+        return cls._custom_df_to_json(data_df, timestamp_index=False)
 
 tsdio = TimeseriesDataIO()
 tsdcsvio = TimeseriesDataCSVIO()

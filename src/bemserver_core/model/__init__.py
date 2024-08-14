@@ -2,6 +2,7 @@
 
 from pathlib import Path
 
+from bemserver_core.model.alerts import Alert
 from bemserver_core.model.team import Member, Team
 
 from .campaigns import (
@@ -129,6 +130,7 @@ __all__ = [
     "Token",
     "Team",
     "Member",
+    "Alert",
 ]
 
 
@@ -187,6 +189,7 @@ AUTH_MODEL_CLASSES = [
     Token,
     Team,
     Member,
+    Alert,
 ]
 
 

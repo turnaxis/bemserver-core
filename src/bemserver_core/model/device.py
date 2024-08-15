@@ -1,4 +1,3 @@
-from bemserver_core.model import User, Building
 import sqlalchemy as sqla
 from bemserver_core.database import Base
 from bemserver_core.authorization import AuthMixin, Relation, auth

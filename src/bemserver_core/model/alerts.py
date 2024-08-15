@@ -25,9 +25,11 @@ class Alert(AuthMixin, Base):
     location = sqla.Column(sqla.String(100), nullable=False)
     created_at = sqla.Column(sqla.DateTime, default=datetime.utcnow)
     resolved_at = sqla.Column(sqla.DateTime, nullable=True)
-    resolved_by_user_id = sqla.Column(sqla.ForeignKey("users.id"), nullable=True)
+    resolved_by = sqla.Column(sqla.String(80))
     resolution_description = sqla.Column(sqla.String(200), nullable=True)
     action_taken = sqla.Column(sqla.String(200), nullable=True)
+    actual_consumption = sqla.Column(sqla.Float, nullable=True)
+    timestamp = sqla.Column(sqla.DateTime, default=datetime.utcnow)
 
     device = sqla.orm.relationship(
         "Device",

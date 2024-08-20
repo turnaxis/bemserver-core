@@ -6,7 +6,7 @@ class Threshold(AuthMixin, Base):
     __tablename__ = "thresholds"
 
     id = sqla.Column(sqla.Integer, primary_key=True)
-    device_id = sqla.Column(sqla.ForeignKey("device.id"), nullable=False)
+    device_id = sqla.Column(sqla.ForeignKey("devices.id"), nullable=False)
     user_id = sqla.Column(sqla.ForeignKey("users.id"), nullable=False)
     value = sqla.Column(sqla.Float, nullable=False)
     created_at = sqla.Column(sqla.Date, nullable=False)

@@ -10,23 +10,11 @@ class AlertType(Enum):
     ORANGE = "orange"
     RED = "red"
 
-class Threshold(AuthMixin, Base):
-    __tablename__ = "thresholds"
-
-    id = sqla.Column(sqla.Integer, primary_key=True)
-    device_id = sqla.Column(sqla.ForeignKey("devices.id"), nullable=False)
-    user_id = sqla.Column(sqla.ForeignKey("users.id"), nullable=False)
-    value = sqla.Column(sqla.Float, nullable=False)
-    created_at = sqla.Column(sqla.Date, nullable=False)
-
-    device = sqla.orm.relationship("Device", backref="thresholds")
-    user = sqla.orm.relationship("User", backref="thresholds")
-
 class Alert(AuthMixin, Base):
     __tablename__ = "alerts"
 
     id = sqla.Column(sqla.Integer, primary_key=True)
-    device_id = sqla.Column(sqla.ForeignKey("devices.id"), nullable=False)
+    device_id = sqla.Column(sqla.ForeignKey("device.id"), nullable=False)
     user_id = sqla.Column(sqla.ForeignKey("users.id"), nullable=False)
     threshold_id = sqla.Column(sqla.ForeignKey("thresholds.id"), nullable=True)
     description = sqla.Column(sqla.String(200), nullable=True)

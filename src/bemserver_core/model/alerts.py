@@ -4,6 +4,7 @@ from bemserver_core.authorization import AuthMixin, Relation, auth
 from enum import Enum
 from datetime import datetime
 from sqlalchemy.dialects.postgresql import ENUM
+from bemserver_core.model.thresholds import Threshold
 
 class AlertType(Enum):
     GREEN = "green"
@@ -42,6 +43,12 @@ class Alert(AuthMixin, Base):
                     kind="one",
                     other_type="User",
                     my_field="user_id",
+                    other_field="id",
+                ),
+                "threshold": Relation(
+                    kind="one",
+                    other_type="Threshold",
+                    my_field="threshold_id",
                     other_field="id",
                 ),
             },

@@ -58,10 +58,12 @@ def smtp_send_email(recipient, subject, content):
     msg.set_content(content)
 
     try:
-        with smtplib.SMTP(os.getenv("MAIL_SERVER"), os.getenv("MAIL_PORT")) as server:
+        with smtplib.SMTP(os.getenv("MAIL_SERVER"), int(os.getenv("MAIL_PORT"))) as server:
+            server.ehlo(os.getenv("MAIL_SERVER"))
             server.starttls()  # Secure the connection
+            server.ehlo(os.getenv("MAIL_SERVER"))
             server.login(os.getenv("MAIL_USERNAME"), os.getenv("MAIL_PASSWORD"))
             server.send_message(msg)
-        print("Email sent successfully")
+            
     except Exception as e:
         print(f"Failed to send email: {e}")

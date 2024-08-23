@@ -5,6 +5,7 @@ from enum import Enum
 from datetime import datetime
 from sqlalchemy.dialects.postgresql import ENUM
 from bemserver_core.model.thresholds import Threshold
+from bemserver_core.database import db
 
 class AlertType(Enum):
     GREEN = "green"
@@ -24,9 +25,16 @@ class Alert(AuthMixin, Base):
     actual_consumption = sqla.Column(sqla.Float, nullable=True)
     timestamp = sqla.Column(sqla.Date, nullable=False)
 
+    resolved = sqla.Column(sqla.Boolean, nullable=False, default=False)
+    resolved_at = sqla.Column(sqla.DateTime, nullable=True)
+    resolved_by = sqla.Column(sqla.ForeignKey("users.id"), nullable=True)
+
     threshold = sqla.orm.relationship("Threshold", backref="alerts")
     device = sqla.orm.relationship("Device", backref="alerts")
-    user = sqla.orm.relationship("User", backref="alerts")
+    
+    user = sqla.orm.relationship("User", foreign_keys=[user_id], backref="alerts")
+    resolved_user = sqla.orm.relationship("User", foreign_keys=[resolved_by], backref="resolved_alerts")
+
 
     @classmethod
     def register_class(cls):
@@ -45,6 +53,12 @@ class Alert(AuthMixin, Base):
                     my_field="user_id",
                     other_field="id",
                 ),
+                "resolved_user": Relation(
+                    kind="one",
+                    other_type="User",
+                    my_field="resolved_by",
+                    other_field="id",
+                ),
                 "threshold": Relation(
                     kind="one",
                     other_type="Threshold",
@@ -53,3 +67,16 @@ class Alert(AuthMixin, Base):
                 ),
             },
         )
+
+    @classmethod
+    def get_active_alerts(cls, **kwargs):
+        return db.session.query(cls).filter_by(resolved=False, **kwargs).all()
+
+    @classmethod
+    def get_resolved_alerts(cls, **kwargs):
+        return db.session.query(cls).filter_by(resolved=True, **kwargs).all()
+
+    def mark_resolved(self, user_id):
+        self.resolved = True
+        self.resolved_by = user_id
+        self.resolved_at = datetime.utcnow()

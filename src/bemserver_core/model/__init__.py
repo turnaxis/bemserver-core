@@ -4,6 +4,7 @@ from pathlib import Path
 
 from bemserver_core.model.alerts import Alert
 from bemserver_core.model.team import Member, Team
+from bemserver_core.model.thresholds import Threshold
 
 from .campaigns import (
     Campaign,
@@ -131,6 +132,7 @@ __all__ = [
     "Team",
     "Member",
     "Alert",
+    "Threshold",
 ]
 
 
@@ -190,6 +192,7 @@ AUTH_MODEL_CLASSES = [
     Team,
     Member,
     Alert,
+    Threshold,
 ]
 
 

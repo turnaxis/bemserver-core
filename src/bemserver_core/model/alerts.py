@@ -3,35 +3,38 @@ from bemserver_core.database import Base
 from bemserver_core.authorization import AuthMixin, Relation, auth
 from enum import Enum
 from datetime import datetime
-from sqlalchemy.orm import relationship
-from bemserver_core.model.device import Device
-from bemserver_core.model.users import User
+from sqlalchemy.dialects.postgresql import ENUM
+from bemserver_core.model.thresholds import Threshold
+from bemserver_core.database import db
 
-class PriorityLevel(Enum):
-    LOW = "low"
-    MODERATE = "moderate"
-    HIGH = "high"
+class AlertType(Enum):
+    GREEN = "green"
+    ORANGE = "orange"
+    RED = "red"
 
 class Alert(AuthMixin, Base):
     __tablename__ = "alerts"
 
     id = sqla.Column(sqla.Integer, primary_key=True)
     device_id = sqla.Column(sqla.ForeignKey("devices.id"), nullable=False)
-    threshold = sqla.Column(sqla.Float, nullable=False)
-    consumption = sqla.Column(sqla.Float, nullable=False)
-    status = sqla.Column(sqla.String(50), nullable=False)  # green, orange, red
+    user_id = sqla.Column(sqla.ForeignKey("users.id"), nullable=False)
+    threshold_id = sqla.Column(sqla.ForeignKey("thresholds.id"), nullable=True)
     description = sqla.Column(sqla.String(200), nullable=True)
-    priority = sqla.Column(sqla.Enum(PriorityLevel), nullable=False)
-    action_required = sqla.Column(sqla.String(200), nullable=True)
+    alert_type = sqla.Column(sqla.Enum(AlertType), nullable=False)
     location = sqla.Column(sqla.String(100), nullable=False)
-    created_at = sqla.Column(sqla.DateTime, default=datetime.utcnow)
-    resolved_at = sqla.Column(sqla.DateTime, nullable=True)
-    resolved_by_user_id = sqla.Column(sqla.ForeignKey("users.id"), nullable=True)
-    resolution_description = sqla.Column(sqla.String(200), nullable=True)
-    action_taken = sqla.Column(sqla.String(200), nullable=True)
+    actual_consumption = sqla.Column(sqla.Float, nullable=True)
+    timestamp = sqla.Column(sqla.Date, nullable=False)
 
-    device = relationship("Device", back_populates="alerts")
-    resolved_by_user = relationship("User", back_populates="resolved_alerts")
+    resolved = sqla.Column(sqla.Boolean, nullable=False, default=False)
+    resolved_at = sqla.Column(sqla.DateTime, nullable=True)
+    resolved_by = sqla.Column(sqla.ForeignKey("users.id"), nullable=True)
+
+    threshold = sqla.orm.relationship("Threshold", backref="alerts")
+    device = sqla.orm.relationship("Device", backref="alerts")
+    
+    user = sqla.orm.relationship("User", foreign_keys=[user_id], backref="alerts")
+    resolved_user = sqla.orm.relationship("User", foreign_keys=[resolved_by], backref="resolved_alerts")
+
 
     @classmethod
     def register_class(cls):
@@ -44,15 +47,36 @@ class Alert(AuthMixin, Base):
                     my_field="device_id",
                     other_field="id",
                 ),
-                "resolved_by_user": Relation(
+                "user": Relation(
                     kind="one",
                     other_type="User",
-                    my_field="resolved_by_user_id",
+                    my_field="user_id",
+                    other_field="id",
+                ),
+                "resolved_user": Relation(
+                    kind="one",
+                    other_type="User",
+                    my_field="resolved_by",
+                    other_field="id",
+                ),
+                "threshold": Relation(
+                    kind="one",
+                    other_type="Threshold",
+                    my_field="threshold_id",
                     other_field="id",
                 ),
             },
         )
 
+    @classmethod
+    def get_active_alerts(cls, **kwargs):
+        return db.session.query(cls).filter_by(resolved=False, **kwargs).all()
 
-Device.alerts = relationship("Alert", back_populates="device", cascade="all, delete-orphan")
-User.resolved_alerts = relationship("Alert", back_populates="resolved_by_user", cascade="all, delete-orphan")
+    @classmethod
+    def get_resolved_alerts(cls, **kwargs):
+        return db.session.query(cls).filter_by(resolved=True, **kwargs).all()
+
+    def mark_resolved(self, user_id):
+        self.resolved = True
+        self.resolved_by = user_id
+        self.resolved_at = datetime.utcnow()

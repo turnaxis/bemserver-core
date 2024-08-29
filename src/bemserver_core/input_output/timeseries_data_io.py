@@ -1231,6 +1231,39 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
         return json.dumps(ret)
 
     @staticmethod
+    def _df_campaign_summary_to_json(data_df, dropna=False, timestamp_index=True):
+        """Serialize dataframe to json
+
+        pandas to_json has a few shortcomings
+        - can't drop NaN values
+        - will convert datetimes to UTC
+        """
+        if timestamp_index:
+            data_df.index = pd.Series(data_df.index).apply(lambda x: x.isoformat())
+
+        ret = {}
+        total_consumption = data_df["value"].sum()
+        for col in data_df.columns:
+            val = data_df[col]
+            print(val)
+            if dropna:
+                val = val.dropna()
+            else:
+                val = val.replace([np.nan], [None])
+            if not val.empty:
+                ret[str(col)] = val.to_dict()
+        response = {
+            **ret,
+            "consumption": (
+                round((int(total_consumption) / 1000), 2) if total_consumption else 0.00
+            ),
+            "unit": "kwH",
+            "cost": (int(total_consumption) * 20 / 1000 if total_consumption else 0.00),
+            "currency": "Ksh",
+        }
+        return json.dumps(response)
+
+    @staticmethod
     def _custom_df_to_json(data_df, dropna=False, timestamp_index=True):
         """Serialize dataframe to json
 
@@ -1354,7 +1387,7 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
             timezone=timezone,
             col_label=col_label,
         )
-        return cls._df_to_json(data_df)
+        return cls._df_campaign_summary_to_json(data_df)
 
     @classmethod
     def export_json_aggregate_by_location(

@@ -718,12 +718,18 @@ class TimeseriesDataIO:
         }
         query = (
             "SELECT date_trunc(:bucket_width_unit, timestamp, :timezone) AS bucket,"
-            f" {aggregation}(value) AS value "
-            "FROM ts_data, timeseries, ts_by_data_states "
+            f" {aggregation}(ts_data.value) AS value "
+            "FROM ts_data "
+            "JOIN ts_by_data_states ON ts_data.ts_by_data_state_id = ts_by_data_states.id "
+            "JOIN timeseries ON ts_by_data_states.timeseries_id = timeseries.id "
+            "JOIN ( "
+            "SELECT DISTINCT timeseries_id "
+            "FROM devices_by_timeseries "
+            ") AS unique_device_timeseries ON timeseries.id = unique_device_timeseries.timeseries_id "
             "WHERE ts_data.ts_by_data_state_id = ts_by_data_states.id "
             "  AND ts_by_data_states.data_state_id = :data_state_id "
             "  AND ts_by_data_states.timeseries_id = timeseries.id "
-            "  AND timeseries_id = ANY(:timeseries_ids) "
+            "  AND timeseries.id = ANY(:timeseries_ids) "
             "  AND timestamp >= :start_dt AND timestamp < :end_dt "
             "GROUP BY bucket "
             "ORDER BY bucket;"
@@ -867,7 +873,9 @@ class TimeseriesDataIO:
         )
         data = db.session.execute(sqla.text(query), params)
 
-        data_df = pd.DataFrame(data, columns=("id", "name", "value", "count")).set_index("id")
+        data_df = pd.DataFrame(
+            data, columns=("id", "name", "value", "count")
+        ).set_index("id")
 
         data_df = data_df.fillna(0)
         return data_df
@@ -984,7 +992,9 @@ class TimeseriesDataIO:
         )
         data = db.session.execute(sqla.text(query), params)
         print(data)
-        data_df = pd.DataFrame(data, columns=("id", "name", "value", "count")).set_index("id")
+        data_df = pd.DataFrame(
+            data, columns=("id", "name", "value", "count")
+        ).set_index("id")
         print(data_df)
         data_df = data_df.fillna(0)
         return data_df
@@ -1411,6 +1421,7 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
             col_label=col_label,
         )
         return cls._custom_df_to_json(data_df, timestamp_index=False)
+
 
 tsdio = TimeseriesDataIO()
 tsdcsvio = TimeseriesDataCSVIO()

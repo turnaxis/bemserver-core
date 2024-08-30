@@ -903,7 +903,7 @@ class TimeseriesDataIO:
         return data_df
 
     @classmethod
-    def get_timeseries_buckets_data_device_category(
+    def get_timeseries_buckets_data_single_device_category(
         cls,
         start_dt,
         end_dt,
@@ -997,25 +997,27 @@ class TimeseriesDataIO:
             "start_dt": start_dt,
             "end_dt": end_dt,
             "bucket_width_unit": bucket_width_unit,
+            "category_id": category_id
         }
         query = (
-            "SELECT date_trunc(:bucket_width_unit, timestamp, :timezone) AS bucket,"
-            f" {aggregation}(ts_data.value) AS value "
+            "SELECT date_trunc(:bucket_width_unit, timestamp, :timezone) AS bucket, "
+            f"{aggregation}(ts_data.value) AS value "
             "FROM ts_data "
             "JOIN ts_by_data_states ON ts_data.ts_by_data_state_id = ts_by_data_states.id "
             "JOIN timeseries ON ts_by_data_states.timeseries_id = timeseries.id "
             "JOIN ( "
-            "SELECT DISTINCT timeseries_id "
-            "FROM devices_by_timeseries "
+            "    SELECT DISTINCT timeseries_id, device_id "
+            "    FROM devices_by_timeseries "
             ") AS unique_device_timeseries ON timeseries.id = unique_device_timeseries.timeseries_id "
-            "WHERE ts_data.ts_by_data_state_id = ts_by_data_states.id "
-            "  AND ts_by_data_states.data_state_id = :data_state_id "
-            "  AND ts_by_data_states.timeseries_id = timeseries.id "
-            "  AND timeseries.id = ANY(:timeseries_ids) "
-            "  AND timestamp >= :start_dt AND timestamp < :end_dt "
+            "JOIN devices ON unique_device_timeseries.device_id = devices.id "
+            "JOIN devicecategory ON devices.device_category_id = devicecategory.id "
+            "WHERE ts_by_data_states.data_state_id = :data_state_id "
+            "  AND devicecategory.id = :category_id "
+            "  AND ts_data.timestamp >= :start_dt AND ts_data.timestamp < :end_dt "
             "GROUP BY bucket "
             "ORDER BY bucket;"
         )
+
         data = db.session.execute(sqla.text(query), params)
 
         data_df = pd.DataFrame(data, columns=("timestamp", "value")).set_index(
@@ -1685,7 +1687,7 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
         convert_to=None,
         timezone="UTC",
         col_label="id",
-        device_id=None
+        device_id=None,
     ):
         """Bucket timeseries data and export as JSON string
 
@@ -1702,7 +1704,42 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
             convert_to=convert_to,
             timezone=timezone,
             col_label=col_label,
-            device_id=device_id
+            device_id=device_id,
+        )
+        return cls._df_campaign_summary_to_json(data_df)
+
+    @classmethod
+    def export_json_bucket_combined_device_category(
+        cls,
+        start_dt,
+        end_dt,
+        timeseries,
+        data_state,
+        bucket_width_value,
+        bucket_width_unit,
+        aggregation="avg",
+        *,
+        convert_to=None,
+        timezone="UTC",
+        col_label="id",
+        category_id=None,
+    ):
+        """Bucket timeseries data and export as JSON string
+
+        See ``TimeseriesDataIO.get_timeseries_buckets_data``.
+        """
+        data_df = cls.get_timeseries_buckets_data_single_device_category(
+            start_dt,
+            end_dt,
+            timeseries,
+            data_state,
+            bucket_width_value,
+            bucket_width_unit,
+            aggregation,
+            convert_to=convert_to,
+            timezone=timezone,
+            col_label=col_label,
+            category_id=category_id,
         )
         return cls._df_campaign_summary_to_json(data_df)
 

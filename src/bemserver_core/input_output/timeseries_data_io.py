@@ -1275,11 +1275,10 @@ class TimeseriesDataIO:
             "GROUP BY devicecategory.id "
         )
         data = db.session.execute(sqla.text(query), params)
-        print(data)
         data_df = pd.DataFrame(
             data, columns=("id", "name", "value", "count")
         ).set_index("id")
-        print(data_df)
+
         data_df = data_df.fillna(0)
         return data_df
 
@@ -1529,7 +1528,6 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
         total_consumption = data_df["value"].sum()
         for col in data_df.columns:
             val = data_df[col]
-            print(val)
             if dropna:
                 val = val.dropna()
             else:
@@ -1561,7 +1559,6 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
         for index, row in data_df.iterrows():
             site_name = row["name"]
             consumption_value = row["value"]
-
             # Add or update the site name in the result dictionary
             ret[site_name] = {
                 "consumption": (
@@ -1574,6 +1571,7 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
                     int(consumption_value) * 20 / 1000 if consumption_value else 0.00
                 ),
                 "currency": "Ksh",
+                "id": index
             }
 
             if row.get("count"):

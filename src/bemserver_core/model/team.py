@@ -51,6 +51,7 @@ class Member(AuthMixin, Base):
     __tablename__ = "members"
 
     id = sqla.Column(sqla.Integer, primary_key=True)
+    user_id = sqla.Column(sqla.ForeignKey("users.id"), nullable=False)
     name = sqla.Column(sqla.String(80), nullable=False)
     permission_level = sqla.Column(sqla.String(10), nullable=False, default="VIEWER")
     authorized_locations = sqla.Column(sqla.String(255), nullable=True)
@@ -62,6 +63,11 @@ class Member(AuthMixin, Base):
     team = sqla.orm.relationship(
         "Team",
         backref=sqla.orm.backref("members", cascade="all, delete-orphan"),
+    )
+
+    user = sqla.orm.relationship(
+        "User", 
+        backref=sqla.orm.backref("member", cascade="all, delete-orphan"),
     )
 
     def set_password(self, password: str) -> None:
@@ -78,6 +84,13 @@ class Member(AuthMixin, Base):
                     other_type="Team",
                     my_field="team_id",
                     other_field="id"
+                ),
+                "user": Relation(
+                    kind="one", 
+                    other_type="User", 
+                    my_field="user_id", 
+                    other_field="id"
                 )
+
             }
         )

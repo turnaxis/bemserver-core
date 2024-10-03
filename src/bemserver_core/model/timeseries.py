@@ -39,41 +39,17 @@ class TimeseriesDataState(AuthMixin, Base):
 
 class Timeseries(AuthMixin, Base):
     __tablename__ = "timeseries"
-    __table_args__ = (sqla.UniqueConstraint("campaign_id", "name"),)
+    __table_args__ = (sqla.UniqueConstraint("name"),)
 
     id = sqla.Column(sqla.Integer, primary_key=True)
     name = sqla.Column(sqla.String(80), nullable=False)
     description = sqla.Column(sqla.String(500))
     unit_symbol = sqla.Column(sqla.String(20), default="", nullable=False)
-    campaign_id = sqla.Column(sqla.ForeignKey("campaigns.id"), nullable=False)
-    campaign_scope_id = sqla.Column(sqla.ForeignKey("c_scopes.id"), nullable=False)
-
-    campaign = sqla.orm.relationship(
-        "Campaign", backref=sqla.orm.backref("timeseries", cascade="all, delete-orphan")
-    )
-    campaign_scope = sqla.orm.relationship(
-        "CampaignScope",
-        backref=sqla.orm.backref("timeseries", cascade="all, delete-orphan"),
-    )
 
     @classmethod
     def register_class(cls):
         auth.register_class(
             cls,
-            fields={
-                "campaign": Relation(
-                    kind="one",
-                    other_type="Campaign",
-                    my_field="campaign_id",
-                    other_field="id",
-                ),
-                "campaign_scope": Relation(
-                    kind="one",
-                    other_type="CampaignScope",
-                    my_field="campaign_scope_id",
-                    other_field="id",
-                ),
-            },
         )
 
     def _before_flush(self):
@@ -656,8 +632,6 @@ def init_db_timeseries_triggers():
     Production setups should rely on migration scripts.
     """
     make_columns_read_only(
-        Timeseries.campaign_id,
-        Timeseries.campaign_scope_id,
         TimeseriesProperty.value_type,
         TimeseriesPropertyData.timeseries_id,
         TimeseriesPropertyData.property_id,

@@ -627,6 +627,7 @@ class TimeseriesDataIO:
         start_dt,
         end_dt,
         timeseries,
+        devices,
         data_state,
         bucket_width_value,
         bucket_width_unit,
@@ -711,6 +712,7 @@ class TimeseriesDataIO:
         params = {
             "timezone": timezone,
             "timeseries_ids": [ts.id for ts in timeseries],
+            "device_ids": [d.id for d in devices],
             "data_state_id": data_state.id,
             "start_dt": start_dt,
             "end_dt": end_dt,
@@ -722,14 +724,11 @@ class TimeseriesDataIO:
             "FROM ts_data "
             "JOIN ts_by_data_states ON ts_data.ts_by_data_state_id = ts_by_data_states.id "
             "JOIN timeseries ON ts_by_data_states.timeseries_id = timeseries.id "
-            "JOIN ( "
-            "SELECT DISTINCT timeseries_id "
-            "FROM devices_by_timeseries "
-            ") AS unique_device_timeseries ON timeseries.id = unique_device_timeseries.timeseries_id "
             "WHERE ts_data.ts_by_data_state_id = ts_by_data_states.id "
             "  AND ts_by_data_states.data_state_id = :data_state_id "
             "  AND ts_by_data_states.timeseries_id = timeseries.id "
             "  AND timeseries.id = ANY(:timeseries_ids) "
+            "  AND device_id = ANY(:device_ids) "
             "  AND timestamp >= :start_dt AND timestamp < :end_dt "
             "GROUP BY bucket "
             "ORDER BY bucket;"
@@ -1644,6 +1643,7 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
         start_dt,
         end_dt,
         timeseries,
+        devices,
         data_state,
         bucket_width_value,
         bucket_width_unit,
@@ -1661,6 +1661,7 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
             start_dt,
             end_dt,
             timeseries,
+            devices,
             data_state,
             bucket_width_value,
             bucket_width_unit,

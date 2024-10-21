@@ -903,6 +903,7 @@ class TimeseriesDataIO:
         start_dt,
         end_dt,
         timeseries,
+        devices,
         data_state,
         bucket_width_value,
         bucket_width_unit,
@@ -993,6 +994,7 @@ class TimeseriesDataIO:
             "end_dt": end_dt,
             "bucket_width_unit": bucket_width_unit,
             "category_id": category_id,
+            "device_ids": [d.id for d in devices],
         }
         query = (
             "SELECT date_trunc(:bucket_width_unit, timestamp, :timezone) AS bucket, "
@@ -1000,15 +1002,13 @@ class TimeseriesDataIO:
             "FROM ts_data "
             "JOIN ts_by_data_states ON ts_data.ts_by_data_state_id = ts_by_data_states.id "
             "JOIN timeseries ON ts_by_data_states.timeseries_id = timeseries.id "
-            "JOIN ( "
-            "    SELECT DISTINCT timeseries_id, device_id "
-            "    FROM devices_by_timeseries "
-            ") AS unique_device_timeseries ON timeseries.id = unique_device_timeseries.timeseries_id "
-            "JOIN devices ON unique_device_timeseries.device_id = devices.id "
+            "JOIN devices ON ts_data.device_id = devices.id "
             "JOIN devicecategory ON devices.device_category_id = devicecategory.id "
             "WHERE ts_by_data_states.data_state_id = :data_state_id "
             "  AND devicecategory.id = :category_id "
             "  AND ts_data.timestamp >= :start_dt AND ts_data.timestamp < :end_dt "
+            " AND device_id = ANY(:device_ids) "
+            " AND timeseries.id = ANY(:timeseries_ids) "
             "GROUP BY bucket "
             "ORDER BY bucket;"
         )
@@ -1168,6 +1168,7 @@ class TimeseriesDataIO:
         start_dt,
         end_dt,
         timeseries,
+        devices,
         data_state,
         bucket_width_value,
         bucket_width_unit,
@@ -1255,6 +1256,7 @@ class TimeseriesDataIO:
             "start_dt": start_dt,
             "end_dt": end_dt,
             "bucket_width_unit": bucket_width_unit,
+            "device_ids": [d.id for d in devices],
         }
         query = (
             "SELECT devicecategory.id, devicecategory.name, "
@@ -1263,11 +1265,11 @@ class TimeseriesDataIO:
             "FROM ts_data "
             "JOIN ts_by_data_states ON ts_data.ts_by_data_state_id = ts_by_data_states.id "
             "JOIN timeseries ON ts_by_data_states.timeseries_id = timeseries.id "
-            "JOIN devices_by_timeseries ON timeseries.id = devices_by_timeseries.timeseries_id "
-            "JOIN devices ON devices_by_timeseries.device_id = devices.id "
+            "JOIN devices ON ts_data.device_id = devices.id "
             "JOIN devicecategory ON devices.device_category_id = devicecategory.id "
             "WHERE ts_by_data_states.data_state_id = :data_state_id "
             "   AND timeseries.id = ANY(:timeseries_ids) "
+            "   AND ts_data.device_id = ANY(:device_ids) "
             "   AND ts_data.timestamp >= :start_dt "
             "   AND ts_data.timestamp < :end_dt "
             "GROUP BY devicecategory.id "
@@ -1712,6 +1714,7 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
         start_dt,
         end_dt,
         timeseries,
+        devices,
         data_state,
         bucket_width_value,
         bucket_width_unit,
@@ -1730,6 +1733,7 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
             start_dt,
             end_dt,
             timeseries,
+            devices,
             data_state,
             bucket_width_value,
             bucket_width_unit,
@@ -1782,6 +1786,7 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
         start_dt,
         end_dt,
         timeseries,
+        devices,
         data_state,
         bucket_width_value,
         bucket_width_unit,
@@ -1799,6 +1804,7 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
             start_dt,
             end_dt,
             timeseries,
+            devices,
             data_state,
             bucket_width_value,
             bucket_width_unit,

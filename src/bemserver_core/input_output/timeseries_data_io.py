@@ -1045,6 +1045,7 @@ class TimeseriesDataIO:
         start_dt,
         end_dt,
         timeseries,
+        devices,
         data_state,
         bucket_width_value,
         bucket_width_unit,
@@ -1132,6 +1133,7 @@ class TimeseriesDataIO:
             "start_dt": start_dt,
             "end_dt": end_dt,
             "bucket_width_unit": bucket_width_unit,
+            "device_ids": [d.id for d in devices],
         }
         query = (
             "SELECT sites.id,sites.name, "
@@ -1140,12 +1142,12 @@ class TimeseriesDataIO:
             "FROM ts_data "
             "JOIN ts_by_data_states ON ts_data.ts_by_data_state_id = ts_by_data_states.id "
             "JOIN timeseries ON ts_by_data_states.timeseries_id = timeseries.id "
-            "JOIN devices_by_timeseries ON timeseries.id = devices_by_timeseries.timeseries_id "
-            "JOIN devices ON devices_by_timeseries.device_id = devices.id "
+            "JOIN devices ON ts_data.device_id = devices.id "
             "JOIN buildings ON devices.building_id = buildings.id "
             "JOIN sites ON buildings.site_id = sites.id "
             "WHERE ts_by_data_states.data_state_id = :data_state_id "
-            "   AND timeseries.id = ANY(:timeseries_ids) "
+            "  AND timeseries.id = ANY(:timeseries_ids) "
+            " AND ts_data.device_id = ANY(:device_ids) "
             "   AND ts_data.timestamp >= :start_dt "
             "   AND ts_data.timestamp < :end_dt "
             "GROUP BY sites.id "
@@ -1157,6 +1159,7 @@ class TimeseriesDataIO:
         ).set_index("id")
 
         data_df = data_df.fillna(0)
+
         return data_df
 
     @classmethod
@@ -1744,6 +1747,7 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
         start_dt,
         end_dt,
         timeseries,
+        devices,
         data_state,
         bucket_width_value,
         bucket_width_unit,
@@ -1761,6 +1765,7 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
             start_dt,
             end_dt,
             timeseries,
+            devices,
             data_state,
             bucket_width_value,
             bucket_width_unit,

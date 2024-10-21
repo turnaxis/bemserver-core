@@ -862,15 +862,11 @@ class TimeseriesDataIO:
             "FROM ts_data "
             "JOIN ts_by_data_states ON ts_data.ts_by_data_state_id = ts_by_data_states.id "
             "JOIN timeseries ON ts_by_data_states.timeseries_id = timeseries.id "
-            "JOIN ( "
-            "SELECT DISTINCT timeseries_id "
-            "FROM devices_by_timeseries "
-            "WHERE device_id = :device_id "
-            ") AS unique_device_timeseries ON timeseries.id = unique_device_timeseries.timeseries_id "
             "WHERE ts_data.ts_by_data_state_id = ts_by_data_states.id "
             "  AND ts_by_data_states.data_state_id = :data_state_id "
             "  AND ts_by_data_states.timeseries_id = timeseries.id "
             "  AND timeseries.id = ANY(:timeseries_ids) "
+            "  AND device_id = :device_id "
             "  AND timestamp >= :start_dt AND timestamp < :end_dt "
             "GROUP BY bucket "
             "ORDER BY bucket;"
@@ -996,7 +992,7 @@ class TimeseriesDataIO:
             "start_dt": start_dt,
             "end_dt": end_dt,
             "bucket_width_unit": bucket_width_unit,
-            "category_id": category_id
+            "category_id": category_id,
         }
         query = (
             "SELECT date_trunc(:bucket_width_unit, timestamp, :timezone) AS bucket, "
@@ -1570,7 +1566,7 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
                     int(consumption_value) * 20 / 1000 if consumption_value else 0.00
                 ),
                 "currency": "Ksh",
-                "id": index
+                "id": index,
             }
 
             if row.get("count"):

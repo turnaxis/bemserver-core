@@ -3,6 +3,7 @@
 from pathlib import Path
 
 from bemserver_core.model.alerts import Alert
+from bemserver_core.model.reports import Report
 from bemserver_core.model.team import Member, Team
 from bemserver_core.model.thresholds import Threshold
 
@@ -133,6 +134,7 @@ __all__ = [
     "Member",
     "Alert",
     "Threshold",
+    "Report",
 ]
 
 
@@ -193,6 +195,7 @@ AUTH_MODEL_CLASSES = [
     Member,
     Alert,
     Threshold,
+    Report,
 ]
 
 

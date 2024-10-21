@@ -2,6 +2,7 @@ import sqlalchemy as sqla
 from bemserver_core.database import Base
 from sqlalchemy.orm import relationship
 from datetime import datetime
+from bemserver_core.authorization import AuthMixin, Relation, auth
 
 
 # from timeseries_data import TimeseriesData
@@ -18,14 +19,27 @@ class Report(Base):
     cost = sqla.Column(sqla.Float, nullable=False)
     co2_emissions = sqla.Column(sqla.Float, nullable=False)
     renewable_energy_utilization = sqla.Column(sqla.Float, nullable=False)
-    peak_usage_time = sqla.Column(sqla.String(50), nullable=False)
+    peak_usage_time = sqla.Column(sqla.Time, nullable=False)
     cost_savings = sqla.Column(sqla.Float, nullable=True)
 
     # Foreign key to device if required, but not necessary for now.
-    device_id = sqla.Column(sqla.Integer, sqla.ForeignKey("devices.id"), nullable=True)
+    device_id = sqla.Column(sqla.Integer, sqla.ForeignKey("devices.id"),nullable=False)
 
-    device = relationship("Device", back_populates="reports")
+    device = sqla.orm.relationship("Device", backref="reports")
 
+    @classmethod
+    def register_class(cls):
+        auth.register_class(
+            cls,
+            fields={
+                "device": Relation(
+                    kind="one",
+                    other_type="Device",
+                    my_field="device_id",
+                    other_field="id",
+                ),
+            },
+        )
 
 # Function to generate report by location
 def get_report_by_location(session, location, period_start, period_end):

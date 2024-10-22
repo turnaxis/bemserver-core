@@ -627,6 +627,7 @@ class TimeseriesDataIO:
         start_dt,
         end_dt,
         timeseries,
+        devices,
         data_state,
         bucket_width_value,
         bucket_width_unit,
@@ -711,6 +712,7 @@ class TimeseriesDataIO:
         params = {
             "timezone": timezone,
             "timeseries_ids": [ts.id for ts in timeseries],
+            "device_ids": [d.id for d in devices],
             "data_state_id": data_state.id,
             "start_dt": start_dt,
             "end_dt": end_dt,
@@ -722,14 +724,11 @@ class TimeseriesDataIO:
             "FROM ts_data "
             "JOIN ts_by_data_states ON ts_data.ts_by_data_state_id = ts_by_data_states.id "
             "JOIN timeseries ON ts_by_data_states.timeseries_id = timeseries.id "
-            "JOIN ( "
-            "SELECT DISTINCT timeseries_id "
-            "FROM devices_by_timeseries "
-            ") AS unique_device_timeseries ON timeseries.id = unique_device_timeseries.timeseries_id "
             "WHERE ts_data.ts_by_data_state_id = ts_by_data_states.id "
             "  AND ts_by_data_states.data_state_id = :data_state_id "
             "  AND ts_by_data_states.timeseries_id = timeseries.id "
             "  AND timeseries.id = ANY(:timeseries_ids) "
+            "  AND device_id = ANY(:device_ids) "
             "  AND timestamp >= :start_dt AND timestamp < :end_dt "
             "GROUP BY bucket "
             "ORDER BY bucket;"
@@ -863,15 +862,11 @@ class TimeseriesDataIO:
             "FROM ts_data "
             "JOIN ts_by_data_states ON ts_data.ts_by_data_state_id = ts_by_data_states.id "
             "JOIN timeseries ON ts_by_data_states.timeseries_id = timeseries.id "
-            "JOIN ( "
-            "SELECT DISTINCT timeseries_id "
-            "FROM devices_by_timeseries "
-            "WHERE device_id = :device_id "
-            ") AS unique_device_timeseries ON timeseries.id = unique_device_timeseries.timeseries_id "
             "WHERE ts_data.ts_by_data_state_id = ts_by_data_states.id "
             "  AND ts_by_data_states.data_state_id = :data_state_id "
             "  AND ts_by_data_states.timeseries_id = timeseries.id "
             "  AND timeseries.id = ANY(:timeseries_ids) "
+            "  AND device_id = :device_id "
             "  AND timestamp >= :start_dt AND timestamp < :end_dt "
             "GROUP BY bucket "
             "ORDER BY bucket;"
@@ -908,6 +903,7 @@ class TimeseriesDataIO:
         start_dt,
         end_dt,
         timeseries,
+        devices,
         data_state,
         bucket_width_value,
         bucket_width_unit,
@@ -997,7 +993,8 @@ class TimeseriesDataIO:
             "start_dt": start_dt,
             "end_dt": end_dt,
             "bucket_width_unit": bucket_width_unit,
-            "category_id": category_id
+            "category_id": category_id,
+            "device_ids": [d.id for d in devices],
         }
         query = (
             "SELECT date_trunc(:bucket_width_unit, timestamp, :timezone) AS bucket, "
@@ -1005,15 +1002,13 @@ class TimeseriesDataIO:
             "FROM ts_data "
             "JOIN ts_by_data_states ON ts_data.ts_by_data_state_id = ts_by_data_states.id "
             "JOIN timeseries ON ts_by_data_states.timeseries_id = timeseries.id "
-            "JOIN ( "
-            "    SELECT DISTINCT timeseries_id, device_id "
-            "    FROM devices_by_timeseries "
-            ") AS unique_device_timeseries ON timeseries.id = unique_device_timeseries.timeseries_id "
-            "JOIN devices ON unique_device_timeseries.device_id = devices.id "
+            "JOIN devices ON ts_data.device_id = devices.id "
             "JOIN devicecategory ON devices.device_category_id = devicecategory.id "
             "WHERE ts_by_data_states.data_state_id = :data_state_id "
             "  AND devicecategory.id = :category_id "
             "  AND ts_data.timestamp >= :start_dt AND ts_data.timestamp < :end_dt "
+            " AND device_id = ANY(:device_ids) "
+            " AND timeseries.id = ANY(:timeseries_ids) "
             "GROUP BY bucket "
             "ORDER BY bucket;"
         )
@@ -1050,6 +1045,7 @@ class TimeseriesDataIO:
         start_dt,
         end_dt,
         timeseries,
+        devices,
         data_state,
         bucket_width_value,
         bucket_width_unit,
@@ -1137,6 +1133,7 @@ class TimeseriesDataIO:
             "start_dt": start_dt,
             "end_dt": end_dt,
             "bucket_width_unit": bucket_width_unit,
+            "device_ids": [d.id for d in devices],
         }
         query = (
             "SELECT sites.id,sites.name, "
@@ -1145,12 +1142,12 @@ class TimeseriesDataIO:
             "FROM ts_data "
             "JOIN ts_by_data_states ON ts_data.ts_by_data_state_id = ts_by_data_states.id "
             "JOIN timeseries ON ts_by_data_states.timeseries_id = timeseries.id "
-            "JOIN devices_by_timeseries ON timeseries.id = devices_by_timeseries.timeseries_id "
-            "JOIN devices ON devices_by_timeseries.device_id = devices.id "
+            "JOIN devices ON ts_data.device_id = devices.id "
             "JOIN buildings ON devices.building_id = buildings.id "
             "JOIN sites ON buildings.site_id = sites.id "
             "WHERE ts_by_data_states.data_state_id = :data_state_id "
-            "   AND timeseries.id = ANY(:timeseries_ids) "
+            "  AND timeseries.id = ANY(:timeseries_ids) "
+            " AND ts_data.device_id = ANY(:device_ids) "
             "   AND ts_data.timestamp >= :start_dt "
             "   AND ts_data.timestamp < :end_dt "
             "GROUP BY sites.id "
@@ -1162,6 +1159,7 @@ class TimeseriesDataIO:
         ).set_index("id")
 
         data_df = data_df.fillna(0)
+
         return data_df
 
     @classmethod
@@ -1170,6 +1168,7 @@ class TimeseriesDataIO:
         start_dt,
         end_dt,
         timeseries,
+        devices,
         data_state,
         bucket_width_value,
         bucket_width_unit,
@@ -1257,6 +1256,7 @@ class TimeseriesDataIO:
             "start_dt": start_dt,
             "end_dt": end_dt,
             "bucket_width_unit": bucket_width_unit,
+            "device_ids": [d.id for d in devices],
         }
         query = (
             "SELECT devicecategory.id, devicecategory.name, "
@@ -1265,11 +1265,11 @@ class TimeseriesDataIO:
             "FROM ts_data "
             "JOIN ts_by_data_states ON ts_data.ts_by_data_state_id = ts_by_data_states.id "
             "JOIN timeseries ON ts_by_data_states.timeseries_id = timeseries.id "
-            "JOIN devices_by_timeseries ON timeseries.id = devices_by_timeseries.timeseries_id "
-            "JOIN devices ON devices_by_timeseries.device_id = devices.id "
+            "JOIN devices ON ts_data.device_id = devices.id "
             "JOIN devicecategory ON devices.device_category_id = devicecategory.id "
             "WHERE ts_by_data_states.data_state_id = :data_state_id "
             "   AND timeseries.id = ANY(:timeseries_ids) "
+            "   AND ts_data.device_id = ANY(:device_ids) "
             "   AND ts_data.timestamp >= :start_dt "
             "   AND ts_data.timestamp < :end_dt "
             "GROUP BY devicecategory.id "
@@ -1514,7 +1514,9 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
         return json.dumps(ret)
 
     @staticmethod
-    def _df_campaign_summary_to_json(data_df, dropna=False, timestamp_index=True):
+    def _df_campaign_summary_to_json(
+        data_df, timeseries, dropna=False, timestamp_index=True
+    ):
         """Serialize dataframe to json
 
         pandas to_json has a few shortcomings
@@ -1523,7 +1525,6 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
         """
         if timestamp_index:
             data_df.index = pd.Series(data_df.index).apply(lambda x: x.isoformat())
-
         ret = {}
         total_consumption = data_df["value"].sum()
         for col in data_df.columns:
@@ -1539,14 +1540,25 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
             "consumption": (
                 round((int(total_consumption) / 1000), 2) if total_consumption else 0.00
             ),
-            "unit": "kwH",
-            "cost": (int(total_consumption) * 20 / 1000 if total_consumption else 0.00),
-            "currency": "Ksh",
+            "aggregate": (
+                round((int(total_consumption) / 1000), 2) if total_consumption else 0.00
+            ),
+            "unit": timeseries.unit_symbol,
+            "metric": timeseries.name,
         }
+
+        if timeseries.name == "Energy":
+            response = {
+                **response,
+                "cost": (
+                    int(total_consumption) * 20 / 1000 if total_consumption else 0.00
+                ),
+                "currency": "Ksh",
+            }
         return json.dumps(response)
 
     @staticmethod
-    def _custom_df_to_json(data_df, dropna=False, timestamp_index=True):
+    def _custom_df_to_json(data_df, timeseries, dropna=False, timestamp_index=True):
         """Serialize dataframe to json
 
         pandas to_json has a few shortcomings
@@ -1557,25 +1569,38 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
             data_df.index = pd.Series(data_df.index).apply(lambda x: x.isoformat())
         ret = {}
         for index, row in data_df.iterrows():
-            site_name = row["name"]
+            label = row["name"]
             consumption_value = row["value"]
             # Add or update the site name in the result dictionary
-            ret[site_name] = {
+            ret[label] = {
                 "consumption": (
                     round((int(consumption_value) / 1000), 2)
                     if consumption_value
                     else 0.00
                 ),
-                "unit": "kwH",
-                "cost": (
-                    int(consumption_value) * 20 / 1000 if consumption_value else 0.00
+                "aggregate": (
+                    round((int(consumption_value) / 1000), 2)
+                    if consumption_value
+                    else 0.00
                 ),
-                "currency": "Ksh",
-                "id": index
+                "unit": timeseries.unit_symbol,
+                "metric": timeseries.name,
+                "id": index,
             }
 
+            if timeseries.name == "Energy":
+                ret[label] = {
+                    **ret[label],
+                    "cost": (
+                        int(consumption_value) * 20 / 1000
+                        if consumption_value
+                        else 0.00
+                    ),
+                    "currency": "Ksh",
+                }
+
             if row.get("count"):
-                ret[site_name]["devices_count"] = row["count"]
+                ret[label]["devices_count"] = row["count"]
         return json.dumps(ret)
 
     @classmethod
@@ -1644,6 +1669,7 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
         start_dt,
         end_dt,
         timeseries,
+        devices,
         data_state,
         bucket_width_value,
         bucket_width_unit,
@@ -1661,6 +1687,7 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
             start_dt,
             end_dt,
             timeseries,
+            devices,
             data_state,
             bucket_width_value,
             bucket_width_unit,
@@ -1669,7 +1696,7 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
             timezone=timezone,
             col_label=col_label,
         )
-        return cls._df_campaign_summary_to_json(data_df)
+        return cls._df_campaign_summary_to_json(data_df, timeseries[0])
 
     @classmethod
     def export_json_bucket_combined_device(
@@ -1704,7 +1731,7 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
             col_label=col_label,
             device_id=device_id,
         )
-        return cls._df_campaign_summary_to_json(data_df)
+        return cls._df_campaign_summary_to_json(data_df, timeseries[0])
 
     @classmethod
     def export_json_bucket_combined_device_category(
@@ -1712,6 +1739,7 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
         start_dt,
         end_dt,
         timeseries,
+        devices,
         data_state,
         bucket_width_value,
         bucket_width_unit,
@@ -1730,6 +1758,7 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
             start_dt,
             end_dt,
             timeseries,
+            devices,
             data_state,
             bucket_width_value,
             bucket_width_unit,
@@ -1739,7 +1768,7 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
             col_label=col_label,
             category_id=category_id,
         )
-        return cls._df_campaign_summary_to_json(data_df)
+        return cls._df_campaign_summary_to_json(data_df, timeseries[0])
 
     @classmethod
     def export_json_aggregate_by_location(
@@ -1747,6 +1776,7 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
         start_dt,
         end_dt,
         timeseries,
+        devices,
         data_state,
         bucket_width_value,
         bucket_width_unit,
@@ -1764,6 +1794,7 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
             start_dt,
             end_dt,
             timeseries,
+            devices,
             data_state,
             bucket_width_value,
             bucket_width_unit,
@@ -1772,7 +1803,7 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
             timezone=timezone,
             col_label=col_label,
         )
-        return cls._custom_df_to_json(data_df, timestamp_index=False)
+        return cls._custom_df_to_json(data_df, timeseries[0], timestamp_index=False)
 
     @classmethod
     def export_json_aggregate_by_device_category(
@@ -1780,6 +1811,7 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
         start_dt,
         end_dt,
         timeseries,
+        devices,
         data_state,
         bucket_width_value,
         bucket_width_unit,
@@ -1797,6 +1829,7 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
             start_dt,
             end_dt,
             timeseries,
+            devices,
             data_state,
             bucket_width_value,
             bucket_width_unit,
@@ -1805,7 +1838,7 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
             timezone=timezone,
             col_label=col_label,
         )
-        return cls._custom_df_to_json(data_df, timestamp_index=False)
+        return cls._custom_df_to_json(data_df, timeseries[0], timestamp_index=False)
 
 
 tsdio = TimeseriesDataIO()

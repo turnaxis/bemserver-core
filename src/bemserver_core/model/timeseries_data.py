@@ -17,8 +17,12 @@ class TimeseriesData(Base):
         nullable=False,
     )
     value = sqla.Column(sqla.Float)
-
+    device_id = sqla.Column(sqla.ForeignKey("devices.id"), nullable=False)
     timeseries_by_data_state = sqla.orm.relationship(
         "TimeseriesByDataState",
         backref=sqla.orm.backref("timeseries_data", cascade="all, delete-orphan"),
+    )
+    device = sqla.orm.relationship(
+        "Device",
+        backref=sqla.orm.backref("ts_data", cascade="all, delete-orphan"),
     )

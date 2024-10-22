@@ -1538,10 +1538,10 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
         response = {
             **ret,
             "consumption": (
-                round((int(total_consumption) / 1000), 2) if total_consumption else 0.00
+                round(int(total_consumption), 2) if total_consumption else 0.00
             ),
             "aggregate": (
-                round((int(total_consumption) / 1000), 2) if total_consumption else 0.00
+                round(int(total_consumption), 2) if total_consumption else 0.00
             ),
             "unit": timeseries.unit_symbol,
             "metric": timeseries.name,
@@ -1550,9 +1550,7 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
         if timeseries.name == "Energy":
             response = {
                 **response,
-                "cost": (
-                    int(total_consumption) * 20 / 1000 if total_consumption else 0.00
-                ),
+                "cost": (int(total_consumption) * 20 if total_consumption else 0.00),
                 "currency": "Ksh",
             }
         return json.dumps(response)
@@ -1574,14 +1572,10 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
             # Add or update the site name in the result dictionary
             ret[label] = {
                 "consumption": (
-                    round((int(consumption_value) / 1000), 2)
-                    if consumption_value
-                    else 0.00
+                    round(int(consumption_value), 2) if consumption_value else 0.00
                 ),
                 "aggregate": (
-                    round((int(consumption_value) / 1000), 2)
-                    if consumption_value
-                    else 0.00
+                    round(int(consumption_value), 2) if consumption_value else 0.00
                 ),
                 "unit": timeseries.unit_symbol,
                 "metric": timeseries.name,
@@ -1592,9 +1586,7 @@ class TimeseriesDataJSONIO(TimeseriesDataIO, BaseJSONIO):
                 ret[label] = {
                     **ret[label],
                     "cost": (
-                        int(consumption_value) * 20 / 1000
-                        if consumption_value
-                        else 0.00
+                        int(consumption_value) * 20 if consumption_value else 0.00
                     ),
                     "currency": "Ksh",
                 }

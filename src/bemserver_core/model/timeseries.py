@@ -273,13 +273,14 @@ class Timeseries(AuthMixin, Base):
         return tsbds
 
     @classmethod
-    def get_by_name(cls, campaign, name):
+    def get_by_name(cls, name):
         """Get timeseries by name for a given campaign
 
         :param Campaign campaign: Timeseries campaign
         :param str name: Timeseries name
         """
-        return Timeseries.get(name=name, campaign_id=campaign.id).first()
+        # return Timeseries.get(name=name, campaign_id=campaign.id).first()
+        return Timeseries.get(name=name).first()
 
     @classmethod
     def get_many_by_id(cls, timeseries):

@@ -19,7 +19,7 @@ class Report(Base):
     cost = sqla.Column(sqla.Float, nullable=False)
     co2_emissions = sqla.Column(sqla.Float, nullable=False)
     renewable_energy_utilization = sqla.Column(sqla.Float, nullable=False)
-    peak_usage_time = sqla.Column(sqla.Time, nullable=False)
+    peak_usage_time = sqla.Column(sqla.Time, nullable=True)
     cost_savings = sqla.Column(sqla.Float, nullable=True)
 
     # Foreign key to device if required, but not necessary for now.

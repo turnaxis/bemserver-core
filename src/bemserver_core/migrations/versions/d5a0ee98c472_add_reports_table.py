@@ -27,7 +27,7 @@ def upgrade():
     sa.Column('cost', sa.Float(), nullable=False),
     sa.Column('co2_emissions', sa.Float(), nullable=False),
     sa.Column('renewable_energy_utilization', sa.Float(), nullable=False),
-    sa.Column('peak_usage_time', sa.String(length=50), nullable=False),
+    sa.Column('peak_usage_time', sa.Time(), nullable=False),
     sa.Column('cost_savings', sa.Float(), nullable=True),
     sa.Column('device_id', sa.Integer(), nullable=True),
     sa.ForeignKeyConstraint(['device_id'], ['devices.id'], name=op.f('fk_reports_device_id_devices')),
